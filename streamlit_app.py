@@ -7,6 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import altair as alt
 import pymupdf
 import streamlit as st
 from sqlalchemy import create_engine, func, select
@@ -302,15 +303,50 @@ elif page == "Overview":
                     {"Decision": "Needs review", "Invoices": review},
                     {"Decision": "Rejected", "Invoices": rejected},
                 ]
-                st.bar_chart(
-                    decision_chart,
-                    x="Decision",
-                    y="Invoices",
-                    horizontal=True,
-                    sort=False,
-                    height=230,
-                    alt="Horizontal counts of approved, needs review, and rejected invoices.",
+                chart_max = max(approved, review, rejected)
+                y_axis_max = 2 * chart_max - 1
+                chart = (
+                    alt.Chart(alt.Data(values=decision_chart))
+                    .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6, size=54)
+                    .encode(
+                        x=alt.X(
+                            "Decision:N",
+                            sort=None,
+                            axis=alt.Axis(
+                                title=None,
+                                labelAngle=0,
+                                labelColor="#cbd6e7",
+                                labelPadding=10,
+                                labelLimit=160,
+                                labelOverlap=False,
+                                tickSize=0,
+                                domainColor="#354863",
+                            ),
+                        ),
+                        y=alt.Y(
+                            "Invoices:Q",
+                            scale=alt.Scale(domain=[0, y_axis_max], nice=False),
+                            axis=alt.Axis(
+                                title="Invoices",
+                                titleColor="#9baac1",
+                                labelColor="#9baac1",
+                                gridColor="#26364f",
+                                domain=False,
+                            ),
+                        ),
+                        color=alt.Color(
+                            "Decision:N",
+                            scale=alt.Scale(
+                                domain=["Approved", "Needs review", "Rejected"],
+                                range=["#42c6a5", "#f5bd55", "#ee7185"],
+                            ),
+                            legend=None,
+                        ),
+                        tooltip=["Decision:N", "Invoices:Q"],
+                    )
+                    .properties(height=230)
                 )
+                st.altair_chart(chart, use_container_width=True)
             else:
                 st.info("Process a sample or upload an invoice to see the breakdown.")
     with queue_col:
