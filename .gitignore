@@ -1,0 +1,14 @@
+backend/.venv/
+backend/__pycache__/
+backend/app/**/__pycache__/
+backend/data/
+backend/uploads/
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+.pytest_cache/
+.streamlit/secrets.toml
+.venv/
+*.db
+*.sqlite
+*.sqlite3

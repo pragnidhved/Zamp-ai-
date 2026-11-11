@@ -1,0 +1,6 @@
+streamlit==1.66.0
+SQLAlchemy>=2.0,<3
+pymupdf>=1.28,<3
+pytesseract>=0.3.13,<1
+pillow>=10
+pandas>=2.2

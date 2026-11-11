@@ -1,0 +1,1 @@
+{"name":"invoice-reconciliation-ui","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"vite --host 127.0.0.1","build":"tsc --noEmit && vite build"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","react":"latest","react-dom":"latest","typescript":"latest","lucide-react":"latest"}}
