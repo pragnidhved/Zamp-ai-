@@ -28,6 +28,33 @@ SAMPLE_DIR = ROOT / "sample_data" / "invoices"
 
 st.set_page_config(page_title="Invoice Reconciliation", page_icon="🧾", layout="wide")
 
+st.markdown("""
+<style>
+    :root { --ink: #17243a; --muted: #63728a; --line: #e4eaf2; --accent: #3765d8; }
+    [data-testid="stAppViewContainer"] { background: #f5f7fb; }
+    [data-testid="stHeader"] { background: rgba(245,247,251,.92); }
+    [data-testid="stSidebar"] { background: #111d33; }
+    [data-testid="stSidebar"] * { color: #e8eefb; }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { color: #aab8d0; }
+    [data-testid="stSidebar"] [role="radiogroup"] { gap: .35rem; }
+    [data-testid="stSidebar"] [role="radiogroup"] label {
+        padding: .55rem .7rem; border-radius: .65rem; transition: background .15s ease;
+    }
+    [data-testid="stSidebar"] [role="radiogroup"] label:hover { background: #1d2d4a; }
+    [data-testid="stSidebar"] [role="radiogroup"] label p { color: #e8eefb !important; font-weight: 550; }
+    [data-testid="stSidebar"] [role="radiogroup"] label > div:first-child { display: none; }
+    .hero { padding: 1.45rem 1.7rem; border: 1px solid #e4eaf2; border-radius: 1rem;
+        background: linear-gradient(115deg, #fff 5%, #edf3ff 100%); margin: .25rem 0 1rem; }
+    .hero-kicker { color: #3765d8; font-size: .75rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+    .hero-title { color: #17243a; font-size: 1.85rem; font-weight: 750; margin: .25rem 0; }
+    .hero-copy { color: #63728a; margin: 0; }
+    [data-testid="stMetric"] { background: white; border: 1px solid #e4eaf2; border-radius: .85rem; padding: .9rem 1rem; }
+    [data-testid="stMetricLabel"] p { color: #63728a; }
+    div[data-testid="stVerticalBlockBorderWrapper"] { border-radius: .85rem; }
+    h2, h3 { color: #17243a; }
+</style>
+""", unsafe_allow_html=True)
+
 
 def get_session():
     """Create one isolated in-memory SQLite database per browser session."""
@@ -90,6 +117,9 @@ def process_pdf(db, filename: str, content: bytes):
         db.add(inv)
         db.commit()
         db.refresh(inv)
+        # Keep the source PDF in this browser session so it can be downloaded from
+        # both the processing screen and the history screen. It is never persisted.
+        st.session_state.setdefault("processed_pdf_content", {})[inv.id] = content
         try:
             text, method, warnings = extract_pdf(str(path))
             data = parse_invoice(text)
@@ -141,24 +171,41 @@ def invoice_summary(inv):
 
 
 db = get_session()
-st.title("🧾 Invoice Reconciliation")
-st.caption("Local invoice extraction and PO checks. In this cloud demo, each browser session is isolated and temporary.")
-st.warning("Cloud privacy: uploaded PDFs are sent to the Streamlit host for processing. This demo keeps parsed data only in your isolated browser session and deletes temporary PDF files after extraction. Do not upload confidential or regulated invoices.")
 
 all_invoices = db.scalars(select(Invoice).order_by(Invoice.id.desc())).all()
 total = len(all_invoices)
 approved = sum(inv.decision == "APPROVED" for inv in all_invoices)
 review = sum(inv.decision == "NEEDS_REVIEW" for inv in all_invoices)
 rejected = sum(inv.decision == "REJECTED" for inv in all_invoices)
+
+pages = {
+    "Process invoices": "📤",
+    "History & review": "📋",
+    "Vendors & POs": "🏢",
+    "Settings": "⚙️",
+}
+with st.sidebar:
+    st.markdown("<div style='font-size:1.05rem;font-weight:750;color:#fff;padding:.35rem 0'>🧾  ZAMP <span style='color:#91a4c8;font-weight:500'>· Invoice desk</span></div>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;margin:.3rem 0 .55rem'>Workspace</p>", unsafe_allow_html=True)
+    page = st.radio("Workspace navigation", list(pages), format_func=lambda item: f"{pages[item]}   {item}", label_visibility="collapsed")
+    st.divider()
+    st.caption("Demo workspace · session data")
+
+st.markdown(f"""
+<div class="hero">
+  <div class="hero-kicker">Invoice operations · Demo workspace</div>
+  <div class="hero-title">{pages[page]}&nbsp; {page}</div>
+  <p class="hero-copy">Extract invoice details, match purchase orders, and review every decision in one place.</p>
+</div>
+""", unsafe_allow_html=True)
+st.info("Privacy: PDFs are sent to Streamlit for processing and held in temporary session memory so you can retrieve them during this session. Do not upload confidential or regulated invoices.", icon="🔒")
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Processed", total)
 c2.metric("Approved", approved)
 c3.metric("Needs review", review)
 c4.metric("Rejected", rejected)
 
-upload_tab, history_tab, masters_tab, settings_tab = st.tabs(["Process invoices", "History & review", "Vendors & POs", "Settings"])
-
-with upload_tab:
+if page == "Process invoices":
     st.subheader("Upload invoice PDFs")
     uploads = st.file_uploader("Choose one or more PDF invoices (15 MB max each)", type=["pdf"], accept_multiple_files=True)
     if st.button("Process selected PDFs", type="primary", disabled=not uploads):
@@ -181,7 +228,30 @@ with upload_tab:
             except ValueError as exc:
                 st.error(str(exc))
 
-with history_tab:
+    st.divider()
+    st.subheader("Processed invoices")
+    st.caption("Your latest results appear here as soon as processing finishes. Download the original PDF from any row.")
+    if all_invoices:
+        st.dataframe([invoice_summary(inv) for inv in all_invoices], hide_index=True, width="stretch")
+        for inv in all_invoices:
+            data = inv.data or {}
+            label = f"{inv.filename}  ·  {data.get('invoice_number') or 'No invoice number'}  ·  {inv.decision}"
+            with st.expander(label):
+                left, right = st.columns([3, 1])
+                with left:
+                    st.write(f"**Vendor:** {data.get('vendor_name') or 'Not detected'}")
+                    st.write(f"**Invoice total:** {data.get('currency') or ''} {data.get('total_amount') if data.get('total_amount') is not None else 'Not detected'}")
+                    st.write(f"**Extraction:** {inv.method or 'Not available'}")
+                    for reason in (inv.result or {}).get("reasons", []):
+                        st.write(f"• {reason}")
+                pdf_bytes = st.session_state.get("processed_pdf_content", {}).get(inv.id)
+                if pdf_bytes:
+                    with right:
+                        st.download_button("Download PDF", pdf_bytes, file_name=inv.filename, mime="application/pdf", key=f"process-download-{inv.id}", use_container_width=True)
+    else:
+        st.info("No invoices processed yet. Upload PDFs above or try a sample invoice to see results here.")
+
+elif page == "History & review":
     st.subheader("Processing history")
     if all_invoices:
         st.dataframe([invoice_summary(inv) for inv in all_invoices], hide_index=True, width="stretch")
@@ -207,6 +277,9 @@ with history_tab:
                 st.info(result.get("recommended_action", "Review the validation details."))
                 if inv.human_decision:
                     st.success(f"Human decision: {inv.human_decision} — {inv.review_notes or ''}")
+                pdf_bytes = st.session_state.get("processed_pdf_content", {}).get(inv.id)
+                if pdf_bytes:
+                    st.download_button("Download original PDF", pdf_bytes, file_name=inv.filename, mime="application/pdf", key=f"history-download-{inv.id}")
                 if inv.decision == "NEEDS_REVIEW":
                     with st.form(f"review-{inv.id}"):
                         st.markdown("**Record human review** (kept separate from the automated decision)")
@@ -224,7 +297,7 @@ with history_tab:
     else:
         st.info("No invoices processed in this browser session yet.")
 
-with masters_tab:
+elif page == "Vendors & POs":
     st.subheader("Vendor master")
     vendors = db.scalars(select(Vendor).order_by(Vendor.id)).all()
     st.dataframe([{"Vendor ID": v.id, "Name": v.name, "Approved": v.approved, "Currency": v.currency, "Email": v.email or ""} for v in vendors], hide_index=True, width="stretch")
@@ -268,7 +341,7 @@ with masters_tab:
         except Exception as exc:
             db.rollback(); st.error(f"Could not import CSV: {exc}")
 
-with settings_tab:
+elif page == "Settings":
     st.subheader("Reconciliation settings")
     with st.form("settings"):
         tolerance_pct = st.number_input("PO amount tolerance (%)", min_value=0.0, max_value=100.0, value=setting(db, "amount_tolerance_percent", 2.0), step=0.5)
