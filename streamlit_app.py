@@ -26,32 +26,45 @@ from app.services.reconciliation import reconcile  # noqa: E402
 MAX_UPLOAD = 15 * 1024 * 1024
 SAMPLE_DIR = ROOT / "sample_data" / "invoices"
 
-st.set_page_config(page_title="Invoice Reconciliation", page_icon="🧾", layout="wide")
+st.set_page_config(page_title="Invoice Reconciliation", layout="wide")
 
 st.markdown("""
 <style>
-    :root { --ink: #17243a; --muted: #63728a; --line: #e4eaf2; --accent: #3765d8; }
-    [data-testid="stAppViewContainer"] { background: #f5f7fb; }
-    [data-testid="stHeader"] { background: rgba(245,247,251,.92); }
-    [data-testid="stSidebar"] { background: #111d33; }
+    :root { --ink: #e8eefb; --muted: #9baac1; --line: #26364f; --accent: #79a7ff; }
+    [data-testid="stAppViewContainer"] { background: #0b1220; color: var(--ink); }
+    [data-testid="stHeader"] { background: rgba(11,18,32,.94); }
+    [data-testid="stSidebar"] { background: #0e192b; border-right: 1px solid #1d2b42; }
     [data-testid="stSidebar"] * { color: #e8eefb; }
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { color: #aab8d0; }
-    [data-testid="stSidebar"] [role="radiogroup"] { gap: .35rem; }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { color: #9baac1; }
+    [data-testid="stSidebar"] [role="radiogroup"] { gap: .45rem; }
     [data-testid="stSidebar"] [role="radiogroup"] label {
-        padding: .55rem .7rem; border-radius: .65rem; transition: background .15s ease;
+        padding: .65rem .8rem; border-radius: .7rem; border: 1px solid transparent; transition: all .15s ease;
     }
-    [data-testid="stSidebar"] [role="radiogroup"] label:hover { background: #1d2d4a; }
-    [data-testid="stSidebar"] [role="radiogroup"] label p { color: #e8eefb !important; font-weight: 550; }
+    [data-testid="stSidebar"] [role="radiogroup"] label:hover { background: #17263d; }
+    [data-testid="stSidebar"] [role="radiogroup"] label p { color: #d7e1f1 !important; font-weight: 560; }
     [data-testid="stSidebar"] [role="radiogroup"] label > div:first-child { display: none; }
-    .hero { padding: 1.45rem 1.7rem; border: 1px solid #e4eaf2; border-radius: 1rem;
-        background: linear-gradient(115deg, #fff 5%, #edf3ff 100%); margin: .25rem 0 1rem; }
-    .hero-kicker { color: #3765d8; font-size: .75rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
-    .hero-title { color: #17243a; font-size: 1.85rem; font-weight: 750; margin: .25rem 0; }
-    .hero-copy { color: #63728a; margin: 0; }
-    [data-testid="stMetric"] { background: white; border: 1px solid #e4eaf2; border-radius: .85rem; padding: .9rem 1rem; }
-    [data-testid="stMetricLabel"] p { color: #63728a; }
-    div[data-testid="stVerticalBlockBorderWrapper"] { border-radius: .85rem; }
-    h2, h3 { color: #17243a; }
+    .hero { padding: 1.55rem 1.8rem; border: 1px solid #26364f; border-radius: 1rem;
+        background: radial-gradient(ellipse at 85% 10%, #1c3150 0%, #111d30 42%, #101827 100%); margin: .25rem 0 1.1rem; }
+    .hero-kicker { color: #8cb7ff; font-size: .72rem; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
+    .hero-title { color: #f1f5fb; font-size: 1.85rem; font-weight: 740; margin: .3rem 0; }
+    .hero-copy { color: #aab8ce; margin: 0; }
+    [data-testid="stMetric"] { background: #121e30; border: 1px solid #26364f; border-radius: .85rem; padding: .85rem 1rem; }
+    [data-testid="stMetricLabel"] p { color: #9baac1; }
+    [data-testid="stMetricValue"] { color: #f1f5fb; }
+    [data-testid="stVerticalBlockBorderWrapper"] { border-color: #26364f; border-radius: .85rem; background: #101a2a; }
+    [data-testid="stDataFrame"] { border: 1px solid #26364f; border-radius: .75rem; overflow: hidden; }
+    [data-testid="stFileUploader"] section { background: #121e30; border-color: #354863; }
+    [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea,
+    [data-testid="stNumberInput"] input, [data-testid="stSelectbox"] [data-baseweb="select"] > div {
+        background: #121e30; color: #e8eefb; border-color: #354863;
+    }
+    [data-testid="stButton"] button, [data-testid="stDownloadButton"] button {
+        border-radius: .65rem; border-color: #354863; font-weight: 600;
+    }
+    [data-testid="stButton"] button[kind="primary"] { background: #3e70db; border-color: #3e70db; }
+    [data-testid="stExpander"] { background: #111c2d; border-color: #26364f; border-radius: .75rem; }
+    h1, h2, h3, h4, p, label, [data-testid="stMarkdownContainer"] { color: #e2e9f4; }
+    [data-testid="stCaptionContainer"] { color: #9baac1; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -178,27 +191,28 @@ approved = sum(inv.decision == "APPROVED" for inv in all_invoices)
 review = sum(inv.decision == "NEEDS_REVIEW" for inv in all_invoices)
 rejected = sum(inv.decision == "REJECTED" for inv in all_invoices)
 
-pages = {
-    "Process invoices": "📤",
-    "History & review": "📋",
-    "Vendors & POs": "🏢",
-    "Settings": "⚙️",
+pages = ["Process invoices", "History & review", "Vendors & POs", "Settings"]
+page_copy = {
+    "Process invoices": "Add invoices, run automated checks, and access processed PDF files.",
+    "History & review": "Inspect extraction details, validation results, and human review decisions.",
+    "Vendors & POs": "Manage vendor records and purchase orders used during reconciliation.",
+    "Settings": "Tune matching tolerances for this temporary demo session.",
 }
 with st.sidebar:
-    st.markdown("<div style='font-size:1.05rem;font-weight:750;color:#fff;padding:.35rem 0'>🧾  ZAMP <span style='color:#91a4c8;font-weight:500'>· Invoice desk</span></div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:1.05rem;font-weight:750;color:#fff;padding:.35rem 0'>ZAMP <span style='color:#91a4c8;font-weight:500'>· Invoice desk</span></div>", unsafe_allow_html=True)
     st.markdown("<p style='font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;margin:.3rem 0 .55rem'>Workspace</p>", unsafe_allow_html=True)
-    page = st.radio("Workspace navigation", list(pages), format_func=lambda item: f"{pages[item]}   {item}", label_visibility="collapsed")
+    page = st.radio("Workspace navigation", pages, label_visibility="collapsed")
     st.divider()
     st.caption("Demo workspace · session data")
 
 st.markdown(f"""
 <div class="hero">
   <div class="hero-kicker">Invoice operations · Demo workspace</div>
-  <div class="hero-title">{pages[page]}&nbsp; {page}</div>
-  <p class="hero-copy">Extract invoice details, match purchase orders, and review every decision in one place.</p>
+  <div class="hero-title">{page}</div>
+  <p class="hero-copy">{page_copy[page]}</p>
 </div>
 """, unsafe_allow_html=True)
-st.info("Privacy: PDFs are sent to Streamlit for processing and held in temporary session memory so you can retrieve them during this session. Do not upload confidential or regulated invoices.", icon="🔒")
+st.info("Privacy: PDFs are sent to Streamlit for processing and held in temporary session memory so you can retrieve them during this session. Do not upload confidential or regulated invoices.", icon=None)
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Processed", total)
 c2.metric("Approved", approved)
@@ -206,30 +220,40 @@ c3.metric("Needs review", review)
 c4.metric("Rejected", rejected)
 
 if page == "Process invoices":
-    st.subheader("Upload invoice PDFs")
-    uploads = st.file_uploader("Choose one or more PDF invoices (15 MB max each)", type=["pdf"], accept_multiple_files=True)
-    if st.button("Process selected PDFs", type="primary", disabled=not uploads):
-        with st.spinner("Extracting invoice fields and checking vendor, PO, duplicates, and totals…"):
-            for item in uploads or []:
-                try:
-                    process_pdf(db, item.name, item.getvalue())
-                except ValueError as exc:
-                    st.error(f"{item.name}: {exc}")
-        st.rerun()
-
+    st.subheader("Add invoices")
+    st.caption("Upload your own PDFs or run one of the included examples.")
     samples = sorted(SAMPLE_DIR.glob("*.pdf")) if SAMPLE_DIR.exists() else []
-    if samples:
-        st.subheader("Try a sample invoice")
-        selected_sample = st.selectbox("Sample file", samples, format_func=lambda p: p.name)
-        if st.button("Process sample PDF"):
-            try:
-                process_pdf(db, selected_sample.name, selected_sample.read_bytes())
+    upload_col, sample_col = st.columns([1.35, 1], gap="large")
+    with upload_col:
+        with st.container(border=True):
+            st.markdown("#### Upload PDFs")
+            st.caption("Select one or more files. Maximum 15 MB per PDF.")
+            uploads = st.file_uploader("Choose invoice PDFs", type=["pdf"], accept_multiple_files=True, label_visibility="collapsed")
+            if st.button("Process selected PDFs", type="primary", disabled=not uploads, use_container_width=True):
+                with st.spinner("Extracting invoice fields and checking vendor, PO, duplicates, and totals…"):
+                    for item in uploads or []:
+                        try:
+                            process_pdf(db, item.name, item.getvalue())
+                        except ValueError as exc:
+                            st.error(f"{item.name}: {exc}")
                 st.rerun()
-            except ValueError as exc:
-                st.error(str(exc))
+    with sample_col:
+        with st.container(border=True):
+            st.markdown("#### Explore a sample")
+            st.caption("Try the workflow with a demo invoice.")
+            if samples:
+                selected_sample = st.selectbox("Sample file", samples, format_func=lambda p: p.name)
+                if st.button("Process sample PDF", use_container_width=True):
+                    try:
+                        process_pdf(db, selected_sample.name, selected_sample.read_bytes())
+                        st.rerun()
+                    except ValueError as exc:
+                        st.error(str(exc))
+            else:
+                st.write("No sample PDFs are included in this deployment.")
 
     st.divider()
-    st.subheader("Processed invoices")
+    st.subheader(f"Processed invoices · {total}")
     st.caption("Your latest results appear here as soon as processing finishes. Download the original PDF from any row.")
     if all_invoices:
         st.dataframe([invoice_summary(inv) for inv in all_invoices], hide_index=True, width="stretch")
@@ -298,60 +322,73 @@ elif page == "History & review":
         st.info("No invoices processed in this browser session yet.")
 
 elif page == "Vendors & POs":
-    st.subheader("Vendor master")
     vendors = db.scalars(select(Vendor).order_by(Vendor.id)).all()
-    st.dataframe([{"Vendor ID": v.id, "Name": v.name, "Approved": v.approved, "Currency": v.currency, "Email": v.email or ""} for v in vendors], hide_index=True, width="stretch")
-    with st.form("new-vendor"):
-        st.markdown("**Add vendor**")
-        vendor_id = st.text_input("Vendor ID")
-        vendor_name = st.text_input("Vendor name")
-        vendor_currency = st.selectbox("Supported currency", ["INR", "USD", "EUR", "GBP"])
-        vendor_approved = st.checkbox("Approved", value=True)
-        if st.form_submit_button("Save vendor"):
-            if not vendor_id.strip() or not vendor_name.strip():
-                st.error("Vendor ID and name are required.")
-            elif db.get(Vendor, vendor_id.strip()):
-                st.error("That vendor ID already exists.")
-            else:
-                db.add(Vendor(id=vendor_id.strip(), name=vendor_name.strip(), currency=vendor_currency, approved=vendor_approved))
-                db.commit(); st.rerun()
+    vendor_col, add_col = st.columns([1.5, 1], gap="large")
+    with vendor_col:
+        with st.container(border=True):
+            st.subheader(f"Vendor directory · {len(vendors)}")
+            st.caption("Approved suppliers and their supported invoice currencies.")
+            st.dataframe([{"Vendor ID": v.id, "Name": v.name, "Approved": v.approved, "Currency": v.currency, "Email": v.email or ""} for v in vendors], hide_index=True, width="stretch")
+    with add_col:
+        with st.container(border=True):
+            st.subheader("Add a vendor")
+            st.caption("Create a supplier record for this session.")
+            with st.form("new-vendor"):
+                vendor_id = st.text_input("Vendor ID")
+                vendor_name = st.text_input("Vendor name")
+                vendor_currency = st.selectbox("Supported currency", ["INR", "USD", "EUR", "GBP"])
+                vendor_approved = st.checkbox("Approved", value=True)
+                if st.form_submit_button("Save vendor", use_container_width=True):
+                    if not vendor_id.strip() or not vendor_name.strip():
+                        st.error("Vendor ID and name are required.")
+                    elif db.get(Vendor, vendor_id.strip()):
+                        st.error("That vendor ID already exists.")
+                    else:
+                        db.add(Vendor(id=vendor_id.strip(), name=vendor_name.strip(), currency=vendor_currency, approved=vendor_approved))
+                        db.commit(); st.rerun()
 
-    st.subheader("Purchase orders")
+    st.divider()
     pos = db.scalars(select(PurchaseOrder).order_by(PurchaseOrder.number)).all()
-    st.dataframe([{"PO": p.number, "Vendor ID": p.vendor_id, "Currency": p.currency, "Amount": p.total_amount, "Previously invoiced": p.previously_invoiced, "Remaining": p.total_amount - p.previously_invoiced, "Status": p.status} for p in pos], hide_index=True, width="stretch")
-    po_file = st.file_uploader("Import PO CSV", type=["csv"], key="po-csv")
-    if po_file and st.button("Import CSV"):
-        try:
-            reader = csv.DictReader(io.StringIO(po_file.getvalue().decode("utf-8-sig")))
-            if not reader.fieldnames:
-                raise ValueError("The CSV has no header row.")
-            headers = {h.strip().lower(): h for h in reader.fieldnames}
-            required = {"po_number", "vendor_id", "currency", "total_amount"}
-            if not required.issubset(headers):
-                raise ValueError("Required headers: po_number,vendor_id,currency,total_amount.")
-            imported = 0
-            for row in reader:
-                db.merge(PurchaseOrder(
-                    number=row[headers["po_number"]].strip(), vendor_id=row[headers["vendor_id"]].strip(),
-                    currency=row[headers["currency"]].strip().upper(), total_amount=float(row[headers["total_amount"]]),
-                    previously_invoiced=float(row.get(headers.get("previously_invoiced", ""), 0) or 0),
-                    status=row.get(headers.get("status", ""), "OPEN") or "OPEN",
-                )); imported += 1
-            db.commit(); st.success(f"Imported {imported} purchase orders."); st.rerun()
-        except Exception as exc:
-            db.rollback(); st.error(f"Could not import CSV: {exc}")
+    with st.container(border=True):
+        st.subheader(f"Purchase orders · {len(pos)}")
+        st.caption("Open balances available for invoice matching.")
+        st.dataframe([{"PO": p.number, "Vendor ID": p.vendor_id, "Currency": p.currency, "Amount": p.total_amount, "Previously invoiced": p.previously_invoiced, "Remaining": p.total_amount - p.previously_invoiced, "Status": p.status} for p in pos], hide_index=True, width="stretch")
+        with st.expander("Import purchase orders from CSV"):
+            po_file = st.file_uploader("Choose PO CSV", type=["csv"], key="po-csv")
+            if po_file and st.button("Import CSV", key="import-po-csv"):
+                try:
+                    reader = csv.DictReader(io.StringIO(po_file.getvalue().decode("utf-8-sig")))
+                    if not reader.fieldnames:
+                        raise ValueError("The CSV has no header row.")
+                    headers = {h.strip().lower(): h for h in reader.fieldnames}
+                    required = {"po_number", "vendor_id", "currency", "total_amount"}
+                    if not required.issubset(headers):
+                        raise ValueError("Required headers: po_number,vendor_id,currency,total_amount.")
+                    imported = 0
+                    for row in reader:
+                        db.merge(PurchaseOrder(
+                            number=row[headers["po_number"]].strip(), vendor_id=row[headers["vendor_id"]].strip(),
+                            currency=row[headers["currency"]].strip().upper(), total_amount=float(row[headers["total_amount"]]),
+                            previously_invoiced=float(row.get(headers.get("previously_invoiced", ""), 0) or 0),
+                            status=row.get(headers.get("status", ""), "OPEN") or "OPEN",
+                        )); imported += 1
+                    db.commit(); st.success(f"Imported {imported} purchase orders."); st.rerun()
+                except Exception as exc:
+                    db.rollback(); st.error(f"Could not import CSV: {exc}")
 
 elif page == "Settings":
     st.subheader("Reconciliation settings")
-    with st.form("settings"):
-        tolerance_pct = st.number_input("PO amount tolerance (%)", min_value=0.0, max_value=100.0, value=setting(db, "amount_tolerance_percent", 2.0), step=0.5)
-        tolerance_abs = st.number_input("Maximum absolute tolerance", min_value=0.0, value=setting(db, "amount_tolerance_absolute", 1000.0), step=100.0)
-        rounding = st.number_input("Subtotal + tax rounding tolerance", min_value=0.0, value=setting(db, "rounding_tolerance", 1.0), step=0.5)
-        if st.form_submit_button("Save settings"):
-            for key, value in (("amount_tolerance_percent", tolerance_pct), ("amount_tolerance_absolute", tolerance_abs), ("rounding_tolerance", rounding)):
-                saved = db.get(Setting, key) or Setting(key=key, value=float(value))
-                saved.value = float(value); db.add(saved)
-            db.commit(); st.success("Settings saved for this session.")
+    with st.container(border=True):
+        st.caption("Allow small differences between invoice totals and open purchase order balances.")
+        with st.form("settings"):
+            tolerance_pct = st.number_input("PO amount tolerance (%)", min_value=0.0, max_value=100.0, value=setting(db, "amount_tolerance_percent", 2.0), step=0.5)
+            tolerance_abs = st.number_input("Maximum absolute tolerance", min_value=0.0, value=setting(db, "amount_tolerance_absolute", 1000.0), step=100.0)
+            rounding = st.number_input("Subtotal + tax rounding tolerance", min_value=0.0, value=setting(db, "rounding_tolerance", 1.0), step=0.5)
+            if st.form_submit_button("Save settings", use_container_width=True):
+                for key, value in (("amount_tolerance_percent", tolerance_pct), ("amount_tolerance_absolute", tolerance_abs), ("rounding_tolerance", rounding)):
+                    saved = db.get(Setting, key) or Setting(key=key, value=float(value))
+                    saved.value = float(value); db.add(saved)
+                db.commit(); st.success("Settings saved for this session.")
 
 st.divider()
 st.caption("Cloud demo data is isolated per browser session and is cleared when the session ends. Uploaded PDFs are processed from temporary files and are not added to the GitHub repository.")
