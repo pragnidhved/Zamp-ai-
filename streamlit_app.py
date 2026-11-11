@@ -198,15 +198,16 @@ approved = sum(inv.decision == "APPROVED" for inv in all_invoices)
 review = sum(inv.decision == "NEEDS_REVIEW" for inv in all_invoices)
 rejected = sum(inv.decision == "REJECTED" for inv in all_invoices)
 
-pages = ["Process invoices", "History & review", "Vendors & POs", "Settings"]
+pages = ["Overview", "Process invoices", "History & review", "Vendors & POs", "Settings"]
 page_copy = {
+    "Overview": "Track submissions, monitor exceptions, and see what needs attention.",
     "Process invoices": "Add invoices, run automated checks, and access processed PDF files.",
     "History & review": "Work through exceptions and audit the decisions made for each invoice.",
     "Vendors & POs": "Manage vendor records and purchase orders used during reconciliation.",
     "Settings": "Tune matching tolerances for this temporary demo session.",
 }
 with st.sidebar:
-    st.markdown("<div style='font-size:1.05rem;font-weight:750;color:#fff;padding:.35rem 0'>ZAMP <span style='color:#91a4c8;font-weight:500'>· Invoice desk</span></div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:1.05rem;font-weight:750;color:#fff;padding:.35rem 0'>Invoice operations</div>", unsafe_allow_html=True)
     st.markdown("<p style='font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;margin:.3rem 0 .55rem'>Workspace</p>", unsafe_allow_html=True)
     page = st.radio("Workspace navigation", pages, label_visibility="collapsed")
     st.divider()
@@ -214,7 +215,7 @@ with st.sidebar:
 
 st.markdown(f"""
 <div class="hero">
-  <div class="hero-kicker">Invoice operations · Demo workspace</div>
+  <div class="hero-kicker">Accounts payable · Case study workspace</div>
   <div class="hero-title">{page}</div>
   <p class="hero-copy">{page_copy[page]}</p>
 </div>
@@ -282,6 +283,50 @@ if page == "Process invoices":
                         st.download_button("Download PDF", pdf_bytes, file_name=inv.filename, mime="application/pdf", key=f"process-download-{inv.id}", use_container_width=True)
     else:
         st.info("No invoices processed yet. Upload PDFs above or try a sample invoice to see results here.")
+
+elif page == "Overview":
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Total submissions", total)
+    metric_cols[1].metric("Approved", approved)
+    metric_cols[2].metric("Needs review", review)
+    metric_cols[3].metric("Rejected", rejected)
+
+    chart_col, queue_col = st.columns([1.35, 1], gap="large")
+    with chart_col:
+        with st.container(border=True):
+            st.subheader("Decision breakdown")
+            st.caption("Automated recommendations across this session.")
+            if total:
+                st.bar_chart({"Invoices": {"Approved": approved, "Needs review": review, "Rejected": rejected}}, height=230)
+            else:
+                st.info("Process a sample or upload an invoice to see the breakdown.")
+    with queue_col:
+        with st.container(border=True):
+            st.subheader("Work queue")
+            st.caption("Items that may need an operator's attention.")
+            q1, q2 = st.columns(2)
+            q1.metric("Awaiting review", review)
+            q2.metric("Completed", total)
+            st.write("Review flagged invoices in **History & review**.")
+
+    with st.container(border=True):
+        recent = all_invoices[:6]
+        recent_rows = []
+        for inv in recent:
+            data = inv.data or {}
+            recent_rows.append({
+                "Invoice": inv.filename,
+                "Vendor": data.get("vendor_name") or "—",
+                "Amount": f"{data.get('currency') or ''} {data.get('total_amount') if data.get('total_amount') is not None else '—'}",
+                "Processing": "Completed" if inv.decision else "In progress",
+                "Recommendation": inv.decision or "Pending",
+            })
+        st.subheader("Recent invoices")
+        st.caption("Latest submissions in this browser session.")
+        if recent_rows:
+            st.dataframe(recent_rows, hide_index=True, width="stretch")
+        else:
+            st.info("No invoices yet. Open Process invoices to run a sample or upload a PDF.")
 
 elif page == "History & review":
     st.subheader("Review desk")
@@ -425,4 +470,4 @@ elif page == "Settings":
                 db.commit(); st.success("Settings saved for this session.")
 
 st.divider()
-st.caption("Cloud demo data is isolated per browser session and is cleared when the session ends. Uploaded PDFs are processed from temporary files and are not added to the GitHub repository.")
+st.caption("Independent candidate case-study prototype; not an official Zamp product. Demo records are isolated to this browser session. Uploaded PDFs are processed temporarily and are not added to the GitHub repository.")
