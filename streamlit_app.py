@@ -25,6 +25,13 @@ from app.services.reconciliation import reconcile  # noqa: E402
 
 MAX_UPLOAD = 15 * 1024 * 1024
 SAMPLE_DIR = ROOT / "sample_data" / "invoices"
+FEATURED_SAMPLES = (
+    "invoice_01.pdf",
+    "invoice_02.pdf",
+    "invoice_03.pdf",
+    "invoice_03_duplicate.pdf",
+    "invoice_10.pdf",
+)
 
 st.set_page_config(page_title="Invoice Reconciliation", layout="wide")
 
@@ -194,7 +201,7 @@ rejected = sum(inv.decision == "REJECTED" for inv in all_invoices)
 pages = ["Process invoices", "History & review", "Vendors & POs", "Settings"]
 page_copy = {
     "Process invoices": "Add invoices, run automated checks, and access processed PDF files.",
-    "History & review": "Inspect extraction details, validation results, and human review decisions.",
+    "History & review": "Work through exceptions and audit the decisions made for each invoice.",
     "Vendors & POs": "Manage vendor records and purchase orders used during reconciliation.",
     "Settings": "Tune matching tolerances for this temporary demo session.",
 }
@@ -213,16 +220,17 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 st.info("Privacy: PDFs are sent to Streamlit for processing and held in temporary session memory so you can retrieve them during this session. Do not upload confidential or regulated invoices.", icon=None)
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Processed", total)
-c2.metric("Approved", approved)
-c3.metric("Needs review", review)
-c4.metric("Rejected", rejected)
+if page == "Process invoices":
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Processed", total)
+    c2.metric("Approved", approved)
+    c3.metric("Needs review", review)
+    c4.metric("Rejected", rejected)
 
 if page == "Process invoices":
     st.subheader("Add invoices")
     st.caption("Upload your own PDFs or run one of the included examples.")
-    samples = sorted(SAMPLE_DIR.glob("*.pdf")) if SAMPLE_DIR.exists() else []
+    samples = [SAMPLE_DIR / name for name in FEATURED_SAMPLES if (SAMPLE_DIR / name).is_file()]
     upload_col, sample_col = st.columns([1.35, 1], gap="large")
     with upload_col:
         with st.container(border=True):
@@ -276,10 +284,36 @@ if page == "Process invoices":
         st.info("No invoices processed yet. Upload PDFs above or try a sample invoice to see results here.")
 
 elif page == "History & review":
-    st.subheader("Processing history")
+    st.subheader("Review desk")
+    st.caption("A focused queue for exceptions, reviewer decisions, and invoice audit details.")
+    pending_count = sum(inv.decision == "NEEDS_REVIEW" and not inv.human_decision for inv in all_invoices)
+    human_reviewed = sum(bool(inv.human_decision) for inv in all_invoices)
+    resolved_count = sum(inv.decision != "NEEDS_REVIEW" or bool(inv.human_decision) for inv in all_invoices)
+    q1, q2, q3 = st.columns(3)
+    q1.metric("Awaiting review", pending_count)
+    q2.metric("Human decisions", human_reviewed)
+    q3.metric("Resolved automatically or by reviewer", resolved_count)
+
     if all_invoices:
-        st.dataframe([invoice_summary(inv) for inv in all_invoices], hide_index=True, width="stretch")
-        for inv in all_invoices:
+        filter_col, search_col = st.columns([1, 2], gap="large")
+        with filter_col:
+            decision_filter = st.selectbox("Filter by decision", ["All decisions", "Needs review", "Approved", "Rejected"])
+        with search_col:
+            query = st.text_input("Search invoices", placeholder="File name, invoice number, or vendor")
+        decision_values = {"Needs review": "NEEDS_REVIEW", "Approved": "APPROVED", "Rejected": "REJECTED"}
+        visible_invoices = all_invoices
+        if decision_filter in decision_values:
+            visible_invoices = [inv for inv in visible_invoices if inv.decision == decision_values[decision_filter]]
+        if query.strip():
+            normalized_query = query.strip().casefold()
+            visible_invoices = [
+                inv for inv in visible_invoices
+                if normalized_query in " ".join((inv.filename or "", str((inv.data or {}).get("invoice_number") or ""), str((inv.data or {}).get("vendor_name") or ""))).casefold()
+            ]
+        visible_invoices.sort(key=lambda inv: (inv.decision != "NEEDS_REVIEW", inv.id * -1))
+        st.markdown(f"#### Invoice activity · {len(visible_invoices)} shown")
+        st.dataframe([invoice_summary(inv) for inv in visible_invoices], hide_index=True, width="stretch")
+        for inv in visible_invoices:
             data = inv.data or {}
             label = f"{inv.filename} · {data.get('invoice_number') or 'No invoice number'} · {inv.decision}"
             with st.expander(label):
