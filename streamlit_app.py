@@ -297,7 +297,20 @@ elif page == "Overview":
             st.subheader("Decision breakdown")
             st.caption("Automated recommendations across this session.")
             if total:
-                st.bar_chart({"Invoices": {"Approved": approved, "Needs review": review, "Rejected": rejected}}, height=230)
+                decision_chart = [
+                    {"Decision": "Approved", "Invoices": approved},
+                    {"Decision": "Needs review", "Invoices": review},
+                    {"Decision": "Rejected", "Invoices": rejected},
+                ]
+                st.bar_chart(
+                    decision_chart,
+                    x="Decision",
+                    y="Invoices",
+                    horizontal=True,
+                    sort=False,
+                    height=230,
+                    alt="Horizontal counts of approved, needs review, and rejected invoices.",
+                )
             else:
                 st.info("Process a sample or upload an invoice to see the breakdown.")
     with queue_col:
